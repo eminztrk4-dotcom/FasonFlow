@@ -29,13 +29,14 @@ import {
   ROLE_COLORS,
   STAGE_STATUS_LABELS,
   TRANSFER_STATUS_LABELS,
+  STAGE_TYPES,
   type Contact,
   type Order,
   type OrderStage,
   type StageStatus,
   type Transfer,
 } from '@/lib/types'
-import { formatDate } from '@/lib/order-utils'
+import { formatDate, formatDateTime } from '@/lib/order-utils'
 import { cn } from '@/lib/utils'
 import { EditContactDialog } from './edit-contact-dialog'
 
@@ -107,7 +108,7 @@ export function ContactHistoryDialog({
   }, [contact, transfers])
 
   const activeStages = useMemo(
-    () => assignedStages.filter((i) => i.stage.status !== 'completed'),
+    () => assignedStages.filter((i) => i.stage.status === 'in_progress' || i.stage.status === 'pending'),
     [assignedStages],
   )
 
@@ -177,7 +178,11 @@ export function ContactHistoryDialog({
                     </div>
                   </div>
                   <p className="text-sm font-medium text-muted-foreground mt-0.5">
-                    {contact.workshopName ? `${contact.workshopName} Atölyesi` : 'Bağımsız Usta'}
+                    {contact.workshopName 
+                      ? (contact.workshopName.toLowerCase().includes('atölye') 
+                          ? contact.workshopName 
+                          : `${contact.workshopName} Atölyesi`) 
+                      : 'Bağımsız Usta'}
                   </p>
                 </div>
               </div>
@@ -230,7 +235,7 @@ export function ContactHistoryDialog({
         <div className="grid grid-cols-3 gap-3 p-4 bg-background border-b border-border">
           <div className="flex flex-col items-center justify-center p-3 rounded-lg bg-blue-500/5 border border-blue-500/15 text-center">
             <span className="text-2xl font-bold text-blue-600 dark:text-blue-400">
-              {isDriver ? activeTransfers.length + activeStages.length : activeStages.length}
+              {activeStages.length}
             </span>
             <span className="text-xs font-medium text-muted-foreground mt-0.5">
               Aktif İşler
@@ -239,7 +244,7 @@ export function ContactHistoryDialog({
 
           <div className="flex flex-col items-center justify-center p-3 rounded-lg bg-emerald-500/5 border border-emerald-500/15 text-center">
             <span className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
-              {isDriver ? completedTransfers.length + completedStages.length : completedStages.length}
+              {completedStages.length}
             </span>
             <span className="text-xs font-medium text-muted-foreground mt-0.5">
               Tamamlanan
@@ -351,7 +356,7 @@ export function ContactHistoryDialog({
                       {stage.startedAt && (
                         <span className="flex items-center gap-1 text-[11px]">
                           <Clock className="size-3 text-muted-foreground" />
-                          Başlama: {formatDate(stage.startedAt)}
+                          Başlama: {formatDateTime(stage.startedAt)}
                         </span>
                       )}
                     </div>
@@ -404,7 +409,7 @@ export function ContactHistoryDialog({
                       {stage.completedAt && (
                         <span className="flex items-center gap-1">
                           <Clock className="size-3" />
-                          Bitiş: {formatDate(stage.completedAt)}
+                          Bitiş: {formatDateTime(stage.completedAt)}
                         </span>
                       )}
                     </div>
@@ -468,19 +473,29 @@ export function ContactHistoryDialog({
                 <h4 className="text-sm font-semibold">Sevkiyat & Transfer Görevleri</h4>
               </div>
               <div className="space-y-2">
-                {driverTransfers.slice(0, 5).map((t) => (
-                  <div
-                    key={t.id}
-                    className="flex items-center justify-between p-2.5 rounded-lg border border-border bg-card text-xs"
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono font-medium">Transfer #{t.id.slice(0, 6)}</span>
+                {driverTransfers.slice(0, 5).map((t) => {
+                  const order = orders.find((o) => o.id === t.orderId)
+                  const fromStage = order?.stages.find((s) => s.id === t.fromStageId)
+                  const toStage = order?.stages.find((s) => s.id === t.toStageId)
+                  const fromLabel = fromStage ? STAGE_TYPES.find((s) => s.key === fromStage.stageKey)?.label || fromStage.stageName : 'Atölye'
+                  const toLabel = toStage ? STAGE_TYPES.find((s) => s.key === toStage.stageKey)?.label || toStage.stageName : 'Atölye'
+
+                  return (
+                    <div
+                      key={t.id}
+                      className="flex items-center justify-between p-2.5 rounded-lg border border-border bg-card text-xs"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">
+                          {order ? `${order.orderCode} ${order.productTitle} · ${fromLabel} → ${toLabel}` : `Transfer #${t.id.slice(0, 6)}`}
+                        </span>
+                      </div>
+                      <span className="font-medium text-muted-foreground shrink-0 ml-2">
+                        {TRANSFER_STATUS_LABELS[t.status]}
+                      </span>
                     </div>
-                    <span className="font-medium text-muted-foreground">
-                      {TRANSFER_STATUS_LABELS[t.status]}
-                    </span>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             </div>
           )}

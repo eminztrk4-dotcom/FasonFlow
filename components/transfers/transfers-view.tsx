@@ -8,7 +8,7 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/
 import { Separator } from "@/components/ui/separator"
 import { useStore } from "@/lib/store"
 import { TRANSFER_STATUS_LABELS, type Transfer, type TransferStatus } from "@/lib/types"
-import { waitingSince } from "@/lib/order-utils"
+import { formatDateTime } from "@/lib/order-utils"
 import { toast } from "sonner"
 import { TruckIcon, PackageIcon, MapPinIcon, ArrowRightIcon, ClockIcon } from "lucide-react"
 
@@ -38,9 +38,35 @@ export function TransfersView() {
       on_the_way: [],
       delivered: [],
     }
-    for (const t of transfers) g[t.status].push(t)
+    
+    for (const t of transfers) {
+      const order = orderMap.get(t.orderId)
+      if (!order) continue
+      
+      const fromStage = order.stages.find(s => s.id === t.fromStageId)
+      const toStage = order.stages.find(s => s.id === t.toStageId)
+      
+      const isFromCompleted = fromStage ? fromStage.status === 'completed' : true
+      const isToPending = toStage ? toStage.status === 'pending' : true
+      const isToCompleted = toStage ? toStage.status === 'completed' : false
+
+      // 1 & 3. Kural: Henüz sırası gelmemiş (fromStage tamamlanmamış) gelecekteki transferleri gizle.
+      if (!isFromCompleted) continue
+      
+      // 2. Kural: Hedef istasyon çoktan tamamlanmışsa (eski/geçmiş transfer), panoda kalabalık yapmasın, gizle.
+      if (isToCompleted) continue
+
+      // Hedef istasyon "in_progress" (başlamış) ise ve transfer hala bekliyor/yolda görünüyorsa 
+      // (veri uyumsuzluğu) ya da transfer Delivered olduysa (normal akış) gösterebiliriz.
+      // Sadece aktif/sırası gelen transferleri tutmak için ekstra sıkı bir kural:
+      if ((t.status === 'waiting_pickup' || t.status === 'on_the_way') && !isToPending) {
+         continue // Eğer transfer hala yoldaysa ama aşama çoktan başladıysa mantıksız, gizle.
+      }
+
+      g[t.status].push(t)
+    }
     return g
-  }, [transfers])
+  }, [transfers, orderMap])
 
   const stageName = (orderId: string, stageId: string | null) => {
     if (!stageId) return "Atölye"
@@ -63,20 +89,20 @@ export function TransfersView() {
   }
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex flex-col gap-1">
+    <div className="flex-1 flex flex-col h-full overflow-hidden gap-6">
+      <div className="flex flex-col gap-1 shrink-0">
         <h1 className="text-2xl font-bold tracking-tight text-foreground text-balance">Sevkiyat Takibi</h1>
         <p className="text-sm text-muted-foreground text-pretty">
           Atölyeler arası taşıma işlemlerini ve şoför durumlarını izleyin.
         </p>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+      <div className="flex-1 min-h-0 grid grid-cols-1 gap-4 lg:grid-cols-3 overflow-hidden">
         {COLUMNS.map((col) => {
           const items = grouped[col.key]
           return (
-            <div key={col.key} className="flex flex-col gap-3">
-              <div className="flex items-center justify-between px-1">
+            <div key={col.key} className="flex flex-col overflow-hidden gap-3">
+              <div className="flex items-center justify-between px-1 shrink-0">
                 <div className="flex items-center gap-2">
                   <span className={`rounded-md px-2 py-1 text-xs font-semibold ${col.accent}`}>
                     {TRANSFER_STATUS_LABELS[col.key]}
@@ -85,7 +111,7 @@ export function TransfersView() {
                 <span className="text-sm font-medium text-muted-foreground">{items.length}</span>
               </div>
 
-              <div className="flex flex-col gap-3">
+              <div className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-3 pr-2 pb-24 scrollbar-thin scrollbar-thumb-muted-foreground/20">
                 {items.length === 0 ? (
                   <Card className="border-dashed">
                     <CardContent className="py-8">
@@ -105,59 +131,67 @@ export function TransfersView() {
                     const order = orderMap.get(t.orderId)
                     const driver = contactById(t.driverId)
                     return (
-                      <Card key={t.id}>
-                        <CardHeader>
-                          <div className="flex items-center justify-between gap-2">
-                            <CardTitle className="text-sm font-semibold">{order?.orderCode ?? "—"}</CardTitle>
-                            <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-                              <ClockIcon className="size-3" />
-                              {t.status === "waiting_pickup"
-                                ? waitingSince(order?.createdAt ?? null)
-                                : t.status === "on_the_way"
-                                  ? waitingSince(t.pickupTime)
-                                  : waitingSince(t.deliveryTime)}
+                      <div key={t.id} className="h-auto min-h-fit p-4 rounded-xl border border-border bg-card shadow-xs flex flex-col gap-3">
+                        <div className="flex justify-between items-start">
+                          <div className="flex flex-col gap-1 min-w-0 pr-2">
+                            <span className="font-mono text-[11px] font-semibold text-muted-foreground bg-muted px-1.5 py-0.5 rounded w-fit">
+                              {order?.orderCode ?? "—"}
                             </span>
-                          </div>
-                          <p className="truncate text-xs text-muted-foreground">{order?.productTitle}</p>
-                        </CardHeader>
-                        <CardContent className="flex flex-col gap-4">
-                          <div className="flex items-center gap-2 text-sm">
-                            <span className="inline-flex items-center gap-1 rounded-md bg-secondary px-2 py-1 text-xs font-medium text-secondary-foreground">
-                              <PackageIcon className="size-3" />
-                              {stageName(t.orderId, t.fromStageId)}
+                            <span className="text-sm font-semibold text-foreground leading-tight">
+                              {order?.productTitle}
                             </span>
-                            <ArrowRightIcon className="size-4 shrink-0 text-muted-foreground" />
-                            <span className="inline-flex items-center gap-1 rounded-md bg-secondary px-2 py-1 text-xs font-medium text-secondary-foreground">
-                              <MapPinIcon className="size-3" />
-                              {stageName(t.orderId, t.toStageId)}
-                            </span>
-                          </div>
-
-                          <Separator />
-
-                          <div className="flex items-center justify-between gap-2">
-                            <div className="flex items-center gap-2">
-                              <Avatar className="size-8">
-                                <AvatarFallback className="bg-brand/10 text-xs text-brand">
-                                  {driver ? initials(driver.fullName) : "?"}
-                                </AvatarFallback>
-                              </Avatar>
-                              <div className="flex flex-col">
-                                <span className="text-xs font-medium text-foreground">
-                                  {driver?.fullName ?? "Atanmadı"}
-                                </span>
-                                <span className="text-[11px] text-muted-foreground">Şoför</span>
-                              </div>
-                            </div>
-
-                            {t.status !== "delivered" && (
-                              <Button size="sm" variant={t.status === "on_the_way" ? "default" : "outline"} onClick={() => advance(t)} disabled={advancingId === t.id}>
-                                {advancingId === t.id ? 'Güncelleniyor...' : t.status === "waiting_pickup" ? "Yola Çıkar" : "Teslim Et"}
-                              </Button>
+                            {order?.clientName && (
+                              <span className="text-xs text-muted-foreground line-clamp-2">
+                                {order.clientName}
+                              </span>
                             )}
                           </div>
-                        </CardContent>
-                      </Card>
+                          <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground shrink-0 bg-secondary/50 px-1.5 py-0.5 rounded">
+                            <ClockIcon className="size-3" />
+                            {t.status === "waiting_pickup"
+                              ? formatDateTime(order?.createdAt ?? null)
+                              : t.status === "on_the_way"
+                                ? formatDateTime(t.pickupTime)
+                                : formatDateTime(t.deliveryTime)}
+                          </span>
+                        </div>
+                        
+                        <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                          <span className="inline-flex items-center gap-1 rounded-md bg-secondary/80 px-2 py-1 text-xs font-medium text-secondary-foreground border border-border/40">
+                            <PackageIcon className="size-3 text-muted-foreground" />
+                            {stageName(t.orderId, t.fromStageId)}
+                          </span>
+                          <ArrowRightIcon className="size-3 shrink-0 text-muted-foreground" />
+                          <span className="inline-flex items-center gap-1 rounded-md bg-secondary/80 px-2 py-1 text-xs font-medium text-secondary-foreground border border-border/40">
+                            <MapPinIcon className="size-3 text-muted-foreground" />
+                            {stageName(t.orderId, t.toStageId)}
+                          </span>
+                        </div>
+
+                        <Separator className="my-1 border-border/50" />
+
+                        <div className="flex items-center justify-between gap-2 mt-auto pt-1">
+                          <div className="flex items-center gap-2.5">
+                            <Avatar className="size-7 ring-1 ring-border">
+                              <AvatarFallback className="bg-primary/10 text-[10px] font-bold text-primary">
+                                {driver ? initials(driver.fullName) : "?"}
+                              </AvatarFallback>
+                            </Avatar>
+                            <div className="flex flex-col leading-none">
+                              <span className="text-xs font-medium text-foreground">
+                                {driver?.fullName ?? "Atanmadı"}
+                              </span>
+                              <span className="text-[10px] text-muted-foreground mt-1">Şoför / Kurye</span>
+                            </div>
+                          </div>
+
+                          {t.status !== "delivered" && (
+                            <Button size="sm" className="h-7 text-xs px-2.5" variant={t.status === "on_the_way" ? "default" : "outline"} onClick={() => advance(t)} disabled={advancingId === t.id}>
+                              {advancingId === t.id ? 'Bekleyin...' : t.status === "waiting_pickup" ? "Yola Çıkar" : "Teslim Et"}
+                            </Button>
+                          )}
+                        </div>
+                      </div>
                     )
                   })
                 )}

@@ -22,7 +22,7 @@ import {
   type StageStatus,
 } from '@/lib/types'
 import { StatusBadge } from '@/components/status-badge'
-import { derivedStatus, formatDate } from '@/lib/order-utils'
+import { derivedStatus, formatDate, formatDateTime } from '@/lib/order-utils'
 import { Input } from '@/components/ui/input'
 import {
   Select,
@@ -159,7 +159,7 @@ function StageRow({
         </span>
         <div className="min-w-0 flex-1 flex flex-col gap-1">
           <p className="truncate text-sm font-medium">
-            {stage.stageOrder}. {stage.stageName}
+            {stage.stageOrder}. {stageDef?.label || stage.stageName}
           </p>
           {stage.status !== 'completed' ? (
             <div>
@@ -204,6 +204,7 @@ function StageRow({
                 ? `${usta.fullName}${usta.workshopName ? ` · ${usta.workshopName}` : ''}`
                 : 'Usta atanmadı'}{' '}
               · {STAGE_STATUS_LABELS[stage.status]}
+              {stage.completedAt && ` · ${formatDateTime(stage.completedAt)}`}
             </p>
           )}
         </div>
@@ -217,8 +218,42 @@ function StageRow({
                 setUpdating(true)
                 try {
                   await setStageStatus(order.id, stage.id, next)
+                  
+                  // 2. İşlem başarılı olursa, bir sonraki aşamayı bul ve 'in_progress' yap
+                  if (next === 'completed') {
+                    const currentIndex = order.stages.findIndex(s => s.id === stage.id)
+                    if (currentIndex !== -1) {
+                      const nextStage = order.stages[currentIndex + 1]
+                      if (nextStage && nextStage.status === 'pending') {
+                        await setStageStatus(order.id, nextStage.id, 'in_progress')
+                      }
+                    }
+                  }
+
+                  // n8n Webhook Tetikleme
+                  if (next === 'completed') {
+                    const webhookUrl = process.env.NEXT_PUBLIC_N8N_ORDER_WEBHOOK_URL
+                    if (webhookUrl) {
+                      await fetch(webhookUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          event: 'stage_completed',
+                          orderId: order.id,
+                          orderCode: order.orderCode,
+                          productTitle: order.productTitle,
+                          stageId: stage.id,
+                          stageKey: stage.stageKey,
+                          stageName: stageDef?.label || stage.stageName,
+                          assignedContactId: stage.assignedContactId,
+                          contactName: usta?.fullName || null
+                        }),
+                      }).catch(err => console.warn('[n8n] Webhook hatası:', err))
+                    }
+                  }
+
                   toast.success(
-                    `${order.orderCode} · ${stage.stageName} → ${STAGE_STATUS_LABELS[next]}`,
+                    `${order.orderCode} · ${stageDef?.label || stage.stageName} → ${STAGE_STATUS_LABELS[next]}`,
                   )
                 } catch (err: unknown) {
                   const msg = err instanceof Error ? err.message : 'Hata'

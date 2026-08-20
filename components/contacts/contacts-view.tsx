@@ -56,11 +56,15 @@ export function ContactsView() {
     }
 
     for (const order of orders) {
+      // Yalnızca 'active' olan siparişleri değerlendir (completed/cancelled hariç)
+      if (order.status !== 'active') continue
+
       const isOrderLate = Boolean(order.deadline && new Date(order.deadline).getTime() < now)
 
       for (const stage of order.stages) {
         if (stage.assignedContactId && stats[stage.assignedContactId]) {
-          if (stage.status !== 'completed') {
+          // Usta/Atölye için: Sadece 'in_progress' veya 'pending' aşamaları say
+          if (stage.status === 'in_progress' || stage.status === 'pending') {
             stats[stage.assignedContactId].activeCount += 1
             if (isOrderLate) {
               stats[stage.assignedContactId].lateCount += 1
@@ -72,8 +76,12 @@ export function ContactsView() {
 
     // Şoförler için aktif transferleri de ekle
     for (const transfer of transfers) {
+      const parentOrder = orders.find((o) => o.id === transfer.orderId)
+      if (parentOrder && parentOrder.status !== 'active') continue // Sipariş bittiyse/iptalse sayma
+
       if (transfer.driverId && stats[transfer.driverId]) {
-        if (transfer.status !== 'delivered') {
+        // Şoför için: Sadece aktif olanları ('waiting_pickup' veya 'on_the_way') say
+        if (transfer.status === 'waiting_pickup' || transfer.status === 'on_the_way') {
           stats[transfer.driverId].activeCount += 1
         }
       }
@@ -83,8 +91,8 @@ export function ContactsView() {
   }, [contacts, orders, transfers])
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+    <div className="flex-1 flex flex-col h-full overflow-hidden gap-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between shrink-0">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-balance">
             Rehber & Atölye Yönetimi
@@ -96,7 +104,7 @@ export function ContactsView() {
         <AddContactDialog />
       </div>
 
-      <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
+      <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 shrink-0">
         {FILTERS.map((f) => {
           const active = filter === f.key
           const count =
@@ -129,7 +137,8 @@ export function ContactsView() {
         })}
       </div>
 
-      {list.length === 0 ? (
+      <div className="flex-1 min-h-0 overflow-y-auto -mx-2 px-2 pb-24 scrollbar-thin scrollbar-thumb-muted-foreground/20">
+        {list.length === 0 ? (
         <Empty>
           <EmptyHeader>
             <EmptyMedia variant="icon">
@@ -275,6 +284,7 @@ export function ContactsView() {
           })}
         </div>
       )}
+      </div>
 
       {/* Usta İş Geçmişi & Profil Modalı */}
       <ContactHistoryDialog

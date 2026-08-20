@@ -58,3 +58,18 @@ export function formatDate(iso: string | null): string {
     year: 'numeric',
   })
 }
+
+export function formatDateTime(iso: string | null): string {
+  if (!iso) return '—'
+  const d = new Date(iso)
+  const datePart = d.toLocaleDateString('tr-TR', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  })
+  const timePart = d.toLocaleTimeString('tr-TR', {
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+  return `${datePart} · ${timePart}`
+}

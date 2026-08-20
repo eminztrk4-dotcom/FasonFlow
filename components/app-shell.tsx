@@ -8,15 +8,18 @@ import {
   Users,
   Truck,
   Boxes,
+  Archive,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { StoreProvider } from '@/lib/store'
+import { StoreProvider, useStore } from '@/lib/store'
+import { isLate } from '@/lib/order-utils'
 
 const NAV = [
   { href: '/', label: 'Canlı Takip', icon: LayoutDashboard },
   { href: '/siparis-olustur', label: 'Yeni Sipariş', icon: PlusCircle },
   { href: '/kisiler', label: 'Rehber', icon: Users },
   { href: '/sevkiyat', label: 'Sevkiyat', icon: Truck },
+  { href: '/gecmis', label: 'Geçmiş İşler', icon: Archive },
 ]
 
 function Brand() {
@@ -34,6 +37,31 @@ function Brand() {
 }
 
 function NavLinks({ pathname }: { pathname: string }) {
+  const { orders, transfers } = useStore()
+  
+  const lateOrdersCount = orders.filter((o) => isLate(o)).length
+  const activeTransfersCount = transfers.filter((t) => {
+    if (t.status === 'delivered') return false
+
+    const order = orders.find((o) => o.id === t.orderId)
+    if (!order) return false
+
+    const fromStage = order.stages.find((s) => s.id === t.fromStageId)
+    const toStage = order.stages.find((s) => s.id === t.toStageId)
+
+    const isFromCompleted = fromStage ? fromStage.status === 'completed' : true
+    const isToPending = toStage ? toStage.status === 'pending' : true
+    const isToCompleted = toStage ? toStage.status === 'completed' : false
+
+    if (!isFromCompleted) return false
+    if (isToCompleted) return false
+    if ((t.status === 'waiting_pickup' || t.status === 'on_the_way') && !isToPending) {
+      return false
+    }
+
+    return t.status === 'waiting_pickup' || t.status === 'on_the_way'
+  }).length
+
   return (
     <>
       {NAV.map((item) => {
@@ -42,24 +70,36 @@ function NavLinks({ pathname }: { pathname: string }) {
             ? pathname === '/'
             : pathname.startsWith(item.href)
         const Icon = item.icon
+        
+        let badgeCount = 0
+        if (item.href === '/') badgeCount = lateOrdersCount
+        if (item.href === '/sevkiyat') badgeCount = activeTransfersCount
+
         return (
           <Link
             key={item.href}
             href={item.href}
             className={cn(
-              'flex shrink-0 items-center gap-3 whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+              'flex shrink-0 items-center justify-between whitespace-nowrap rounded-lg px-3 py-2 text-sm font-medium transition-colors',
               active
                 ? 'bg-secondary text-foreground'
                 : 'text-muted-foreground hover:bg-secondary/60 hover:text-foreground',
             )}
           >
-            <Icon
-              className={cn(
-                'size-[18px] shrink-0',
-                active && 'text-brand',
-              )}
-            />
-            {item.label}
+            <div className="flex items-center gap-3">
+              <Icon
+                className={cn(
+                  'size-[18px] shrink-0',
+                  active && 'text-brand',
+                )}
+              />
+              {item.label}
+            </div>
+            {badgeCount > 0 && (
+              <span className="ml-auto bg-rose-500 text-white text-[11px] font-semibold px-1.5 py-0.5 rounded-full shadow-sm leading-none">
+                {badgeCount}
+              </span>
+            )}
           </Link>
         )
       })}
@@ -72,7 +112,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <StoreProvider>
-      <div className="flex min-h-svh">
+      <div className="flex h-screen w-full overflow-hidden">
         {/* Desktop sidebar */}
         <aside className="fixed inset-y-0 left-0 hidden w-64 flex-col border-r border-border bg-sidebar px-4 py-5 lg:flex">
           <Brand />
@@ -97,8 +137,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </nav>
         </header>
 
-        <main className="flex-1 lg:pl-64">
-          <div className="mx-auto max-w-7xl px-4 pb-16 pt-[124px] sm:px-6 lg:px-8 lg:pt-8">
+        <main className="flex-1 lg:pl-64 flex flex-col h-full overflow-hidden bg-background">
+          <div className="flex-1 min-h-0 flex flex-col mx-auto w-full max-w-7xl p-4 pt-[116px] pb-24 lg:pt-6 lg:pb-6 overflow-hidden">
             {children}
           </div>
         </main>

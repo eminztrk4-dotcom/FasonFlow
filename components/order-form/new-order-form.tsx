@@ -129,8 +129,8 @@ export function NewOrderForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-6">
-      <div>
+    <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto flex flex-col gap-6 pb-32 pr-2 scrollbar-thin scrollbar-thumb-muted-foreground/20">
+      <div className="shrink-0">
         <h1 className="text-2xl font-bold tracking-tight text-balance">
           Yeni Sipariş & Rota Oluştur
         </h1>
@@ -139,7 +139,7 @@ export function NewOrderForm() {
         </p>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-5">
+      <div className="grid gap-6 lg:grid-cols-5 shrink-0">
         {/* Order info */}
         <Card className="lg:col-span-3">
           <CardHeader>
@@ -255,7 +255,7 @@ export function NewOrderForm() {
       </div>
 
       {/* Route builder */}
-      <Card>
+      <Card className="shrink-0 h-auto">
         <CardHeader>
           <CardTitle>Üretim Rotası</CardTitle>
           <CardDescription>
@@ -399,7 +399,7 @@ export function NewOrderForm() {
         </CardContent>
       </Card>
 
-      <div className="flex items-center justify-end gap-3">
+      <div className="flex items-center justify-end gap-3 shrink-0 mt-4">
         <Button
           type="button"
           variant="ghost"
